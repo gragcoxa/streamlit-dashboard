@@ -158,22 +158,22 @@ if df is not None:
     # Filtrar por mês/ano
     df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
 
-    # Filtro de data
-    if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
-        valid_dates = df_filtered['Data'].dropna().dt.date.unique()
-        if len(valid_dates) > 0:
-            start_date, end_date = st.sidebar.date_input(
-                "Selecione o período:",
-                value=(min(valid_dates), max(valid_dates)),
-                min_value=min(valid_dates),
-                max_value=max(valid_dates)
-            )
-
-            # Filtrar o dataframe com base nas datas selecionadas
-            df_filtered = df_filtered[
-                (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
-    else:
-        df_filtered = df.copy()
+    # # Filtro de data
+    # if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
+    #     valid_dates = df_filtered['Data'].dropna().dt.date.unique()
+    #     if len(valid_dates) > 0:
+    #         start_date, end_date = st.sidebar.date_input(
+    #             "Selecione o período:",
+    #             value=(min(valid_dates), max(valid_dates)),
+    #             min_value=min(valid_dates),
+    #             max_value=max(valid_dates)
+    #         )
+    #
+    #         # Filtrar o dataframe com base nas datas selecionadas
+    #         df_filtered = df_filtered[
+    #             (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
+    # else:
+    #     df_filtered = df.copy()
 
     # Layout principal com quatro colunas
     col1, col2, col3, col4 = st.columns(4)
