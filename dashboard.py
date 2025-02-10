@@ -3,11 +3,29 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import calendar
+import urllib.parse
+
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (broker)', layout='wide')
 st.title('Dashboard - Grag Apostador (broker)')
 
+# Mapping of Portuguese month names to month numbers
+month_map = {
+    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4,
+    "Maio": 5, "Junho": 6, "Julho": 7, "Agosto": 8,
+    "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+}
+
+# Function to parse "Mês/Ano" strings into datetime objects
+def parse_month_year(month_year_str):
+    try:
+        month_name, year = month_year_str.split('/')
+        month = month_map[month_name]
+        year = int(year) + 2000  # Convert "23" to 2023, "24" to 2024, etc.
+        return datetime(year, month, 1)
+    except (ValueError, KeyError):
+        return None
 
 # Obter o nome do mês em português
 def get_month_name(month_number):
@@ -29,63 +47,120 @@ def convert_to_float(value):
     except (ValueError, TypeError):
         return None
 
-
 # Função para carregar dados do Google Sheets
-def load_google_sheets(sheet_url):
+def load_google_sheets(sheet_url, sheet_name):
     sheet_id = sheet_url.split("/d/")[1].split("/")[0]
-    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv"
+    # URL-encode the sheet name to handle special characters like 'ç'
+    encoded_sheet_name = urllib.parse.quote(sheet_name)
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
 
     try:
-        df = pd.read_csv(csv_url)
-        df.drop(columns=['A', 'M/F', 'Referência', 'Stake*', 'Unnamed: 16', 'Dia', 'Saldo.1'], inplace=True)
-
+        df = pd.read_csv(csv_url, encoding='utf-8')
+        df = df[['Nº', 'Entrada', 'País', 'Tipo', 'Mercado', 'Linha', 'Stake', 'Data', 'Odd', 'Resultado', 'L/P', 'Saldo']]
         df['Stake'] = df['Stake'].astype(str).str.replace(',', '.').astype(float)
         df['L/P'] = df['L/P'].astype(str).str.replace(',', '.').astype(float)
         df['Saldo'] = df['Saldo'].astype(str).str.replace(',', '.').astype(float)
 
-
         # Converter colunas numéricas
-        numeric_columns = ['L/P', 'Odd', 'Stake']
+        numeric_columns = ['L/P', 'Odd', 'Stake', 'Saldo']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = df[col].apply(convert_to_float)
 
-        # Converter a coluna Day para datetime
+        # Converter a coluna Data para datetime
         if 'Data' in df.columns:
             try:
                 df['Data'] = pd.to_datetime(df['Data'], format='%d/%m', errors='coerce')
-                df['Data'] = df['Data'].apply(lambda x: x.replace(year=2025) if pd.notnull(x) else x)
-
-
+                # Ajustar o ano com base no nome da aba (ex: "Maio/23" -> 2023)
+                year = int(sheet_name.split('/')[1]) + 2000  # Converte "23" para 2023, "24" para 2024, etc.
+                df['Data'] = df['Data'].apply(lambda x: x.replace(year=year) if pd.notnull(x) else x)
+                # Remover linhas com datas inválidas
+                df = df.dropna(subset=['Data'])
             except Exception as e:
-                st.warning(f"Aviso: Erro ao converter datas: {e}")
+                st.warning(f"Aviso: Erro ao converter datas na aba {sheet_name}: {e}")
 
         return df
     except Exception as e:
-        st.error(f"Erro ao carregar a planilha: {e}")
+        st.error(f"Erro ao carregar a planilha {sheet_name}: {e}")
         return None
-
 
 # URL da planilha do Google Sheets
 google_sheets_url = "https://docs.google.com/spreadsheets/d/1HhrDjcCB6nIfnbJxh7vRCOkfZ372Ln3heHIA1p6w6aI/edit?usp=sharing"
 
-# Carregar os dados
-df = load_google_sheets(google_sheets_url)
-df = df.dropna(axis=1, how='all')
+# Gerar a lista de abas desde "Maio/23" até o mês atual
+def generate_sheet_names():
+    start_month = 5  # Maio
+    start_year = 2023
+    current_date = datetime.now()
+    current_month = current_date.month
+    current_year = current_date.year
 
-month_translation = {
-    "January": "Janeiro", "February": "Fevereiro", "March": "Março", "April": "Abril",
-    "May": "Maio", "June": "Junho", "July": "Julho", "August": "Agosto",
-    "September": "Setembro", "October": "Outubro", "November": "Novembro", "December": "Dezembro"
-}
+    sheet_names = []
+    for year in range(start_year, current_year + 1):
+        start_m = start_month if year == start_year else 1
+        end_m = current_month if year == current_year else 12
+        for month in range(start_m, end_m + 1):
+            month_name = get_month_name(month)
+            sheet_name = f"{month_name}/{str(year)[-2:]}"
+            sheet_names.append(sheet_name)
+    return sheet_names
 
+# Carregar todas as abas e concatenar
+sheet_names = generate_sheet_names()
+dfs = []
+for sheet_name in sheet_names:
+    df = load_google_sheets(google_sheets_url, sheet_name)
+    if df is not None:
+        dfs.append(df)
+
+# Concatenar os DataFrames
+if dfs:
+    df = pd.concat(dfs, ignore_index=True)
+else:
+    df = None
+
+# Restante do código (processamento, filtros, gráficos, etc.) permanece o mesmo
 if df is not None:
+    df = df.dropna(axis=1, how='all')
+
+    # Substituir as palavras na coluna 'Mercado'
+    df['Mercado'] = df['Mercado'].str.replace('Under', 'Under gols', case=False)
+    df['Mercado'] = df['Mercado'].str.replace('Cantos-', 'Under cantos', case=False)
+    df['Mercado'] = df['Mercado'].str.replace('Over', 'Over gols', case=False)
+
+    # Adicionar coluna de mês/ano para filtro
+    df['Mês/Ano'] = df['Data'].dt.month.map(get_month_name) + '/' + df['Data'].dt.year.astype(str).str[-2:]
+
+    # Identificar o último mês/ano disponível
+    last_date = df['Data'].max()
+    last_month_year = f"{get_month_name(last_date.month)}/{str(last_date.year)[-2:]}"
+
     # Sidebar com filtros
     st.sidebar.header("📊 Filtros")
 
+    # Get unique month/year values, excluding invalid ones
+    available_months_years = [m for m in df['Mês/Ano'].unique() if "Mês Inválido" not in m]
+
+    # Sort the months chronologically (most recent to oldest)
+    sorted_months_years = sorted(
+        available_months_years,
+        key=parse_month_year,
+        reverse=True  # Most recent first
+    )
+
+    # Filtro de mês/ano
+    selected_months_years = st.sidebar.multiselect(
+        "Selecione o período:",
+        sorted_months_years,
+        default=[last_month_year]  # Ensure last_month_year is in the sorted list
+    )
+
+    # Filtrar por mês/ano
+    df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
+
     # Filtro de data
-    if 'Data' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Data']):
-        valid_dates = df['Data'].dropna().dt.date.unique()
+    if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
+        valid_dates = df_filtered['Data'].dropna().dt.date.unique()
         if len(valid_dates) > 0:
             start_date, end_date = st.sidebar.date_input(
                 "Selecione o período:",
@@ -95,9 +170,8 @@ if df is not None:
             )
 
             # Filtrar o dataframe com base nas datas selecionadas
-            df_filtered = df[(df['Data'].dt.date >= start_date) & (df['Data'].dt.date <= end_date)]
-        else:
-            df_filtered = df.copy()
+            df_filtered = df_filtered[
+                (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
     else:
         df_filtered = df.copy()
 
@@ -116,6 +190,8 @@ if df is not None:
     with col2:
         if 'Saldo' in df_filtered.columns and 'Stake' in df_filtered.columns and not df_filtered[
             'Saldo'].isna().all():
+            df_filtered['Stake'] = pd.to_numeric(df['Stake'].astype(str).str.replace(',', '.'), errors='coerce')
+
             last_balance = df_filtered['Saldo'].dropna().iloc[-1]  # Último valor do Balance
             total_stakes = df_filtered['Stake'].dropna().sum()
 
@@ -131,7 +207,7 @@ if df is not None:
         else:
             st.metric(label="📊 ROI", value="N/A")
 
-    # 📈 Taxa de Acerto
+        # 📈 Taxa de Acerto
     with col3:
         if 'Resultado' in df_filtered.columns:
             # [Rest of the existing win rate calculation remains the same]
@@ -155,34 +231,30 @@ if df is not None:
         else:
             st.metric(label="📈 Taxa de Acerto", value="N/A")
 
-    # Convert the 'Odd' column to float, replacing ',' with '.'
-    if 'Odd' in df_filtered.columns:
-        df_filtered['Odd'] = df_filtered['Odd'].astype(str).str.replace(',', '.').astype(float)
-
-    # 🎯 Odds Média
+        # 🎯 Odds Média
     with col4:
         if 'Odd' in df_filtered.columns and not df_filtered['Odd'].isna().all():
             avg_odds = df_filtered['Odd'].dropna().mean()
-            st.metric(label="🎯 Odds Média", value=f"{avg_odds:.2f}")
+            st.metric(label="🎯 Odd Média", value=f"{avg_odds:.2f}")
         else:
-            st.metric(label="🎯 Odds Média", value="N/A")
-
-    # 📈 Evolução do Saldo
+            st.metric(label="🎯 Odd Média", value="N/A")
+        # 📈 Evolução do Saldo
     if 'Saldo' in df_filtered.columns and not df_filtered['Saldo'].isna().all():
         st.subheader("📈 Evolução do Saldo Diário")
 
         # Criar uma cópia do dataframe
         df_graph = df_filtered.dropna(subset=['Data', 'Saldo']).copy()
 
-        # Criar uma coluna com o nome do mês
-        df_graph['Mês'] = df_graph['Data'].dt.strftime('%B')
+        # Criar uma coluna com o nome do mês/ano
+        df_graph['Mês/Ano'] = df_graph['Data'].dt.month.map(get_month_name) + '/' + df_graph['Data'].dt.year.astype(
+            str).str[-2:]
 
-        # Obter o nome do mês único para o título
-        unique_months = df_graph['Mês'].unique()
-        if len(unique_months) == 1:
-            month_title = month_translation.get(unique_months[0], "Mês Inválido")
+        # Obter o nome do mês/ano único para o título
+        unique_months_years = df_graph['Mês/Ano'].unique()
+        if len(unique_months_years) == 1:
+            month_title = unique_months_years[0]  # Usa o formato "Mês/Ano"
         else:
-            month_title = "Múltiplos Meses"
+            month_title = "Múltiplos Meses/Anos"
 
         # Agrupar por Data e pegar o saldo final do dia
         df_daily_balance = df_graph.groupby('Data', as_index=False)['Saldo'].last()
@@ -193,16 +265,16 @@ if df is not None:
         # Criar o gráfico com X sendo os dias e Y o saldo final do dia
         fig_balance = px.line(
             df_daily_balance,
-            x='Data_Formatada',  # Agora o eixo X será por dia
+            x='Data_Formatada',
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
-            markers=True  # Adiciona pontos nos dias
+            markers=True
         )
 
         # Ajustar o eixo X para mostrar todas as datas corretamente
         fig_balance.update_xaxes(
             title="Data",
-            tickmode="linear"  # Garante espaçamento uniforme entre os dias
+            tickmode="linear"
         )
 
         # Mostrar o gráfico no Streamlit
@@ -212,43 +284,64 @@ if df is not None:
     col_left, col_right = st.columns(2)
 
     with col_left:
-        if 'Resultado' in df_filtered.columns:
-            results_count = df_filtered['Resultado'].value_counts()
-            fig_results = px.pie(
-                values=results_count.values,
-                names=results_count.index,
-                title='Distribuição de Resultados'
+        if 'Mercado' in df_filtered.columns and 'L/P' in df_filtered.columns:
+            mercado_pl = df_filtered.groupby('Mercado')['L/P'].sum().reset_index()
+            fig_mercado = px.bar(
+                mercado_pl,
+                x='L/P',
+                y='Mercado',
+                title='Lucro por Mercado',
+                color='L/P',
+                color_continuous_scale='RdYlGn',
+                orientation='h'  # Define a orientação horizontal
+
             )
-            st.plotly_chart(fig_results)
+
+            st.plotly_chart(fig_mercado)
 
     with col_right:
-        if 'Category' in df_filtered.columns:
-            category_count = df_filtered['Category'].value_counts()
-            fig_category = px.bar(
-                x=category_count.index,
-                y=category_count.values,
-                title='Apostas por Categoria'
+        if 'Mercado' in df_filtered.columns and 'L/P' in df_filtered.columns and 'Stake' in df_filtered.columns:
+            # Calcular lucro total e investimento total por mercado
+            roi_df = df_filtered.groupby('Mercado').agg({'L/P': 'sum', 'Stake': 'sum'}).reset_index()
+
+            # Calcular ROI
+            roi_df['ROI'] = roi_df['L/P'] / roi_df['Stake']*100
+
+            # Criar gráfico de barras horizontais para ROI
+            fig_roi = px.bar(
+                roi_df,
+                x='ROI',  # ROI no eixo X
+                y='Mercado',  # Mercado no eixo Y
+                title='ROI por Mercado',
+                color='ROI',
+                color_continuous_scale='RdYlGn',
+                orientation='h'  # Barras na horizontal
             )
-            st.plotly_chart(fig_category)
+            # Atualizar o formato dos rótulos do eixo X para exibir como porcentagem
+            fig_roi.update_layout(
+                xaxis_tickformat=".1f",  # Mantém uma casa decimal
+                xaxis_ticksuffix="%"  # Adiciona o símbolo de porcentagem
+            )
+
+            st.plotly_chart(fig_roi)
 
     # 📋 Tabela de Detalhamento de Apostas
     st.subheader("📋 Detalhamento das Apostas")
 
     # Ensure 'Nº' is numeric and sort in descending order
-    df["Nº"] = pd.to_numeric(df["Nº"], errors="coerce")
-    df = df.dropna(subset=["Entrada"])  # Remove rows where 'Nº' is NaN
+    df_filtered["Nº"] = pd.to_numeric(df_filtered["Nº"], errors="coerce")
+    df_filtered = df_filtered.dropna(subset=["Entrada"])  # Remove rows where 'Nº' is NaN
 
     # Select columns B to M (indices 1 to 12) and sort in descending order by 'Nº'
-    df_sorted = df.sort_values(by="Nº", ascending=False).reset_index(drop=True)
-    df_detailed = df_sorted.iloc[:, 1:13]
-    df_detailed = df_detailed.reset_index(drop=True)
-    df_detailed.drop(columns=['Em aberto'], inplace=True)
-    df_detailed["Data"] = df_detailed["Data"].dt.strftime("%d/%m/%y")
+    df_filtered = df_filtered.sort_values(by="Nº", ascending=False).reset_index(drop=True)
+    df_filtered = df_filtered.reset_index(drop=True)
+    df_filtered["Data"] = df_filtered["Data"].dt.strftime("%d/%m/%y")
     # Ensure numeric columns are properly formatted to 3 decimal places
-    df_detailed["Stake"] = df_detailed["Stake"].apply(lambda x: f"{x:.3f}")
-    df_detailed["Odd"] = df_detailed["Odd"].apply(lambda x: f"{x:.3f}")
-    df_detailed["L/P"] = df_detailed["L/P"].apply(lambda x: f"{x:.3f}")
-    df_detailed["Saldo"] = df_detailed["Saldo"].apply(lambda x: f"{x:.3f}")
+    df_filtered["Stake"] = df_filtered["Stake"].apply(lambda x: f"{x:.3f}")
+    df_filtered["Odd"] = df_filtered["Odd"].apply(lambda x: f"{x:.3f}")
+    df_filtered["L/P"] = df_filtered["L/P"].apply(lambda x: f"{x:.3f}")
+    df_filtered["Saldo"] = df_filtered["Saldo"].apply(lambda x: f"{x:.3f} u")
+    df_filtered = df_filtered.drop(['Nº'], axis=1)
 
     # Define the color function for the 'Resultado' column
     def color_resultado(value):
@@ -260,13 +353,44 @@ if df is not None:
             "Perdida/devolvida": "#E74C3C",  # Light red
             "Perdida": "#C0392B",  # Strong red
         }
-        return f"color: {colors.get(value, 'black')}"  # Default to black if not in dictionary
+        return f"color: {colors.get(value, 'black')}"  # Default to black if not found
 
-    # Apply styles only to 'Resultado' and 'L/P'
-    styled_df = df_detailed.style.map(color_resultado, subset=["Resultado"])
+
+    def color_saldo(value):
+        try:
+            # Remover o 'u' (ou qualquer outro caractere não numérico) antes da conversão
+            value = float(value.replace('u', '').replace(',', ''))  # Garantir que o valor seja numérico
+        except (ValueError, AttributeError):
+            return "color: black"  # Caso não seja um número, usar preto
+
+        if value > 0:
+            return "color: #27AE60"  # Verde para valores positivos
+        elif value < 0:
+            return "color: #C0392B"  # Vermelho para valores negativos
+        else:
+            return "color: #BFBFBF"  # Cinza para zero
+
+
+    def apply_colors(df):
+        # Cria um DataFrame vazio para armazenar os estilos
+        styles = pd.DataFrame("", index=df.index, columns=df.columns)
+
+        # Aplica as cores para a coluna "Resultado"
+        styles["Resultado"] = df_filtered["Resultado"].map(color_resultado)
+
+        # Copia as cores de "Resultado" para "L/P"
+        styles["L/P"] = styles["Resultado"]
+
+        # Aplica as cores para a coluna "Saldo"
+        styles["Saldo"] = df["Saldo"].map(color_saldo)
+
+        return styles
+
+
+    # Aplicar estilos
+    styled_df = df_filtered.style.apply(apply_colors, axis=None, subset=["Resultado", "L/P", "Saldo"])
 
     # Display in Streamlit
-    st.subheader("📋 Detalhamento das Apostas")
     st.dataframe(styled_df, use_container_width=True)
 
     # 📥 Download dos dados filtrados
