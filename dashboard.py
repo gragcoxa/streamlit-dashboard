@@ -293,6 +293,7 @@ if df is not None:
                 title='Lucro por Mercado',
                 color='L/P',
                 color_continuous_scale='RdYlGn',
+                color_continuous_midpoint=0,  # Define o zero como ponto neutro
                 orientation='h'  # Define a orientação horizontal
 
             )
@@ -315,6 +316,7 @@ if df is not None:
                 title='ROI por Mercado',
                 color='ROI',
                 color_continuous_scale='RdYlGn',
+                color_continuous_midpoint=0,  # Define o zero como ponto neutro
                 orientation='h'  # Barras na horizontal
             )
             # Atualizar o formato dos rótulos do eixo X para exibir como porcentagem
