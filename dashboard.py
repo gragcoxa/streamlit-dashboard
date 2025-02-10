@@ -341,7 +341,7 @@ if df is not None:
     df_filtered["Odd"] = df_filtered["Odd"].apply(lambda x: f"{x:.3f}")
     df_filtered["L/P"] = df_filtered["L/P"].apply(lambda x: f"{x:.3f}")
     df_filtered["Saldo"] = df_filtered["Saldo"].apply(lambda x: f"{x:.3f} u")
-    df_filtered = df_filtered.drop(['Nº'], axis=1)
+    df_filtered = df_filtered.drop(['Nº', 'Mês/Ano'], axis=1)
 
     # Define the color function for the 'Resultado' column
     def color_resultado(value):
