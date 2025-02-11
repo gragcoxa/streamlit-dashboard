@@ -10,8 +10,10 @@ img = Image.open("logo_vetor.png")
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (broker)', layout='wide')
-theme = st.get_option("theme.base")
-logo_path = "logo_vetor.png" if theme == "dark" else "logo_black.png"
+# Função para escolher a logo com base no tema
+def get_logo():
+    theme = st.get_option("theme.base")
+    return "logo_vetor.png" if theme == "dark" else "logo_black.png"
 
 st.title('Dashboard - Grag Apostador (Broker)')
 
@@ -140,26 +142,8 @@ if df is not None:
     last_date = df['Data'].max()
     last_month_year = f"{get_month_name(last_date.month)}/{str(last_date.year)[-2:]}"
     # Adicionar o logo da empresa
-    # Exibe um container para a logo
-    logo_container = st.sidebar.empty()
-
-    # JavaScript para detectar o tema e trocar a logo
-    switch_logo_js = """
-    <script>
-    function setLogo() {
-        var theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        var logoPath = theme === "dark" ? "logo_vetor.png" : "logo_black.png";
-        var imgTag = '<img src="' + logoPath + '" width="200">';
-        window.parent.document.getElementById("logo-container").innerHTML = imgTag;
-    }
-    setLogo();
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener('change', setLogo);
-    </script>
-    <div id="logo-container"></div>
-    """
-
-    # Exibe o HTML com JavaScript
-    logo_container.markdown(switch_logo_js, unsafe_allow_html=True)    # Sidebar com filtros
+    st.sidebar.image(get_logo(), width=200)
+    # Sidebar com filtros
     st.sidebar.header("📊 Filtros")
 
     # Get unique month/year values, excluding invalid ones
