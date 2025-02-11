@@ -9,6 +9,8 @@ import urllib.parse
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (VIP)', layout='wide')
 st.title('Dashboard - Grag Apostador (VIP)')
+theme = st.get_option("theme.base")
+logo_path = "logo_vetor.png" if theme == "dark" else "logo_black.png"
 
 # Mapping of Portuguese month names to month numbers
 month_map = {
@@ -134,7 +136,8 @@ if df is not None:
     # Identificar o último mês/ano disponível
     last_date = df['Data'].max()
     last_month_year = f"{get_month_name(last_date.month)}/{str(last_date.year)[-2:]}"
-
+    # Adicionar o logo da empresa
+    st.sidebar.image(logo_path, width=200)
     # Sidebar com filtros
     st.sidebar.header("📊 Filtros")
 
