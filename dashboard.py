@@ -140,8 +140,26 @@ if df is not None:
     last_date = df['Data'].max()
     last_month_year = f"{get_month_name(last_date.month)}/{str(last_date.year)[-2:]}"
     # Adicionar o logo da empresa
-    st.sidebar.image(logo_path, width=200)
-    # Sidebar com filtros
+    # Exibe um container para a logo
+    logo_container = st.sidebar.empty()
+
+    # JavaScript para detectar o tema e trocar a logo
+    switch_logo_js = """
+    <script>
+    function setLogo() {
+        var theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        var logoPath = theme === "dark" ? "logo_vetor.png" : "logo_black.png";
+        var imgTag = '<img src="' + logoPath + '" width="200">';
+        window.parent.document.getElementById("logo-container").innerHTML = imgTag;
+    }
+    setLogo();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener('change', setLogo);
+    </script>
+    <div id="logo-container"></div>
+    """
+
+    # Exibe o HTML com JavaScript
+    logo_container.markdown(switch_logo_js, unsafe_allow_html=True)    # Sidebar com filtros
     st.sidebar.header("📊 Filtros")
 
     # Get unique month/year values, excluding invalid ones
