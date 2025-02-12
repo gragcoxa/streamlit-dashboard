@@ -5,15 +5,38 @@ from datetime import datetime
 import calendar
 import urllib.parse
 from PIL import Image
-
-img = Image.open("logo_vetor.png")
+from pathlib import Path
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (broker)', layout='wide')
 # Função para escolher a logo com base no tema
-def get_logo():
-    theme = st.get_option("theme.base")
-    return "logo_vetor.png" if theme == "dark" else "logo_black.png"
+def setup_theme_logo():
+    # Criar diretório de assets se não existir
+    assets_dir = Path("assets")
+    assets_dir.mkdir(exist_ok=True)
+
+    def get_logo():
+        # Obter o tema atual
+        theme = st.get_option("theme.base")
+
+        # Definir caminhos das imagens usando Path para compatibilidade
+        logo_dark = assets_dir / "logo_vetor.png"
+        logo_light = assets_dir / "logo_black.png"
+
+        # Verificar se os arquivos existem
+        if not logo_dark.exists() or not logo_light.exists():
+            st.sidebar.error("Arquivos de logo não encontrados no diretório 'assets'")
+            return None
+
+        # Retornar o caminho apropriado baseado no tema
+        selected_logo = str(logo_dark if theme == "dark" else logo_light)
+
+        return selected_logo
+
+    # Usar o logo
+    logo_path = get_logo()
+    if logo_path:
+        st.sidebar.image(logo_path, width=200)
 
 st.title('Dashboard - Grag Apostador (Broker)')
 
@@ -142,8 +165,8 @@ if df is not None:
     last_date = df['Data'].max()
     last_month_year = f"{get_month_name(last_date.month)}/{str(last_date.year)[-2:]}"
     # Adicionar o logo da empresa
-    st.sidebar.image(get_logo(), width=200)
-    # Sidebar com filtros
+    setup_theme_logo()
+
     st.sidebar.header("📊 Filtros")
 
     # Get unique month/year values, excluding invalid ones
@@ -294,6 +317,7 @@ if df is not None:
     with col_left:
         if 'Mercado' in df_filtered.columns and 'L/P' in df_filtered.columns:
             mercado_pl = df_filtered.groupby('Mercado')['L/P'].sum().reset_index()
+            mercado_pl = mercado_pl.sort_values('L/P', ascending=True)
             fig_mercado = px.bar(
                 mercado_pl,
                 x='L/P',
@@ -315,6 +339,7 @@ if df is not None:
 
             # Calcular ROI
             roi_df['ROI'] = roi_df['L/P'] / roi_df['Stake']*100
+            roi_df = roi_df.sort_values('ROI', ascending=True)
 
             # Criar gráfico de barras horizontais para ROI
             fig_roi = px.bar(
