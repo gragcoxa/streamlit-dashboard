@@ -6,37 +6,44 @@ import calendar
 import urllib.parse
 from PIL import Image
 from pathlib import Path
+import streamlit.components.v1 as components
+
+
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (broker)', layout='wide')
 # Função para escolher a logo com base no tema
 def setup_theme_logo():
-    # Criar diretório de assets se não existir
-    assets_dir = Path("assets")
-    assets_dir.mkdir(exist_ok=True)
+    # Componente Javascript para detectar o tema
+    theme_detector = components.html(
+        """
+        <script>
+            // Detectar se o tema é escuro
+            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 
-    def get_logo():
-        # Obter o tema atual
-        theme = st.get_option("theme.base")
+            // Enviar o tema para o Python
+            window.parent.postMessage({
+                type: 'theme',
+                isDark: document.body.classList.contains('dark')
+            }, '*');
+        </script>
+        """,
+        height=0,
+    )
 
-        # Definir caminhos das imagens usando Path para compatibilidade
-        logo_dark = assets_dir / "logo_vetor.png"
-        logo_light = assets_dir / "logo_black.png"
+    # Se não houver tema definido na sessão, assumir dark como padrão
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'dark'
 
-        # Verificar se os arquivos existem
-        if not logo_dark.exists() or not logo_light.exists():
-            st.sidebar.error("Arquivos de logo não encontrados no diretório 'assets'")
-            return None
+    # Definir os caminhos das imagens
+    logo_dark = "assets/logo_vetor.png"
+    logo_light = "assets/logo_black.png"
 
-        # Retornar o caminho apropriado baseado no tema
-        selected_logo = str(logo_dark if theme == "dark" else logo_light)
+    # Usar o tema da sessão para selecionar a logo
+    logo_path = logo_dark if st.session_state.theme == 'dark' else logo_light
 
-        return selected_logo
-
-    # Usar o logo
-    logo_path = get_logo()
-    if logo_path:
-        st.sidebar.image(logo_path, width=200)
+    # Mostrar a imagem
+    st.sidebar.image(logo_path, width=200)
 
 st.title('Dashboard - Grag Apostador (Broker)')
 
@@ -326,8 +333,8 @@ if df is not None:
                 color='L/P',
                 color_continuous_scale='RdYlGn',
                 color_continuous_midpoint=0,  # Define o zero como ponto neutro
-                orientation='h'  # Define a orientação horizontal
-
+                orientation='h',  # Define a orientação horizontal
+                labels={'L/P': 'Lucro em unidades'}  # Adiciona esta linha para mudar o título do eixo
             )
 
             st.plotly_chart(fig_mercado)
@@ -351,6 +358,7 @@ if df is not None:
                 color_continuous_scale='RdYlGn',
                 color_continuous_midpoint=0,  # Define o zero como ponto neutro
                 orientation='h'  # Barras na horizontal
+
             )
             # Atualizar o formato dos rótulos do eixo X para exibir como porcentagem
             fig_roi.update_layout(
