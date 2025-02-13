@@ -435,6 +435,7 @@ if df is not None:
     df_filtered["Unidade"] = df_filtered["Unidade"].apply(lambda x: f"{x:.3f}")
     df_filtered["Odd"] = df_filtered["Odd"].apply(lambda x: f"{x:.3f}")
     df_filtered["Lucro/prejuízo"] = df_filtered["Lucro/prejuízo"].apply(lambda x: f"{x:.3f}")
+    df_filtered["EV"] = df_filtered["EV"].apply(lambda x: f"{x:.3f}")
     df_filtered["Saldo"] = df_filtered["Saldo"].apply(lambda x: f"{x:.3f} u")
     df_filtered = df_filtered.drop(['Nº', 'Mês/Ano'], axis=1)
 
