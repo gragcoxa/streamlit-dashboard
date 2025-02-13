@@ -299,7 +299,7 @@ if df is not None:
         # 📈 Evolução do Saldo
     if 'Saldo' in df_filtered.columns and not df_filtered['Saldo'].isna().all():
         st.subheader("📈 Evolução do Saldo Diário")
-
+        df_filtered.sort_values(by=['Data'], ascending=False, inplace=True)
         # Criar uma cópia do dataframe
         df_graph = df_filtered.dropna(subset=['Data', 'Saldo']).copy()
 
@@ -423,11 +423,12 @@ if df is not None:
     st.subheader("📋 Detalhamento das Apostas")
 
     # Ensure 'Nº' is numeric and sort in descending order
-    df_filtered["Nº"] = pd.to_numeric(df_filtered["Nº"], errors="coerce")
-    df_filtered = df_filtered.dropna(subset=["Entrada"])  # Remove rows where 'Nº' is NaN
+    if len(unique_months_years) == 1:
+        df_filtered["Nº"] = pd.to_numeric(df_filtered["Nº"], errors="coerce")
+        df_filtered = df_filtered.sort_values(by="Nº", ascending=False).reset_index(drop=True)
 
+    df_filtered = df_filtered.dropna(subset=["Entrada"])  # Remove rows where 'Nº' is NaN
     # Select columns B to M (indices 1 to 12) and sort in descending order by 'Nº'
-    df_filtered = df_filtered.sort_values(by="Nº", ascending=False).reset_index(drop=True)
     df_filtered = df_filtered.reset_index(drop=True)
     df_filtered["Data"] = df_filtered["Data"].dt.strftime("%d/%m/%y")
     # Ensure numeric columns are properly formatted to 3 decimal places
