@@ -7,6 +7,8 @@ import urllib.parse
 from PIL import Image
 from pathlib import Path
 import streamlit.components.v1 as components
+import plotly.graph_objects as go
+
 
 
 
@@ -37,7 +39,7 @@ def setup_theme_logo():
 
     # Definir os caminhos das imagens
     logo_dark = "assets/logo_vetor.png"
-    logo_light = "assets/logo_black.png"
+    logo_light = "assets/logo_vetor.png"
 
     # Usar o tema da sessão para selecionar a logo
     logo_path = logo_dark if st.session_state.theme == 'dark' else logo_light
@@ -297,23 +299,45 @@ if df is not None:
         # Agrupar por Data e pegar o saldo final do dia
         df_daily_balance = df_graph.groupby('Data', as_index=False)['Saldo'].last()
 
+        # Calcular o lucro diário (diferença do saldo em relação ao dia anterior)
+        df_daily_balance['Lucro'] = df_daily_balance['Saldo'].diff().fillna(0)
+
         # Criar a coluna formatada de data para rótulos do eixo X
         df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
 
-        # Criar o gráfico com X sendo os dias e Y o saldo final do dia
+        # Criar gráfico de linha para saldo
         fig_balance = px.line(
             df_daily_balance,
             x='Data_Formatada',
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
-            markers=True
+            markers=True,
+            line_shape = "spline"  # 🔹 Transforma a linha em curva suave
+
         )
 
-        # Ajustar o eixo X para mostrar todas as datas corretamente
+        # Definir cores de candles para lucro diário (verde para positivo, vermelho para negativo)
+        bar_colors = ['#2ECC71' if lucro > 0 else '#EF5350' for lucro in df_daily_balance['Lucro']]
+
+        # Adicionar barras do lucro diário com as cores de candles
+        fig_balance.add_trace(go.Bar(
+            x=df_daily_balance['Data_Formatada'],
+            y=df_daily_balance['Lucro'],
+            name='Lucro Diário',
+            marker=dict(color=bar_colors),
+            opacity=0.80,  # 🔹 Deixa as barras levemente transparentes para melhor visualização
+            showlegend=False  # 🔹 Hides 'Lucro Diário' from the legend
+
+        ))
+
+        # Ajustar eixo X
         fig_balance.update_xaxes(
             title="Data",
             tickmode="linear"
         )
+
+        # Ajustar layout para evitar sobreposição
+        fig_balance.update_layout(barmode='overlay')
 
         # Mostrar o gráfico no Streamlit
         st.plotly_chart(fig_balance, use_container_width=True)
