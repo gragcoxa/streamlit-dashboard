@@ -205,35 +205,39 @@ if df is not None:
     )
 
     # Lógica de filtragem com tratamento especial para "Acumulado 2025"
+    # Lógica de filtragem com tratamento especial para múltiplos meses ou "Acumulado 2025"
     if "Acumulado 2025" in selected_months_years:
         # Se apenas "Acumulado 2025" for selecionado
         if len(selected_months_years) == 1:
             # Filtrar para pegar somente os dados de 2025
-            df_2025 = df[df['Mês/Ano'].isin(months_2025)].copy()
+            df_filtered = df[df['Mês/Ano'].isin(months_2025)].copy()
 
             # Ordenar por data para garantir acúmulo cronológico correto
-            df_2025 = df_2025.sort_values('Data')
+            df_filtered = df_filtered.sort_values('Data')
 
             # Recalcular o Saldo como valor acumulado da coluna 'L/P'
-            if 'L/P' in df_2025.columns:
-                df_2025['Saldo'] = df_2025['L/P'].cumsum()
-
-            df_filtered = df_2025
+            if 'L/P' in df_filtered.columns:
+                df_filtered['Saldo'] = df_filtered['L/P'].cumsum()
         else:
             # Se "Acumulado 2025" estiver junto com outras seleções específicas
-            # Primeiro, tratamos os dados de 2025 para acumulado
-            df_2025 = df[df['Mês/Ano'].isin(months_2025)].copy()
-            if 'L/P' in df_2025.columns:
-                df_2025['Saldo'] = df_2025['L/P'].cumsum()
-
-            # Depois, pegamos os outros meses selecionados normalmente
             other_selections = [m for m in selected_months_years if m != "Acumulado 2025"]
-            df_others = df[df['Mês/Ano'].isin(other_selections)]
+            all_selections = other_selections + months_2025
+            df_filtered = df[df['Mês/Ano'].isin(all_selections)].copy()
 
-            # Combinamos os dataframes
-            df_filtered = pd.concat([df_2025, df_others])
+            # Ordenar por data e recalcular o Saldo
+            df_filtered = df_filtered.sort_values('Data')
+            if 'L/P' in df_filtered.columns:
+                df_filtered['Saldo'] = df_filtered['L/P'].cumsum()
+    elif len(selected_months_years) > 1:
+        # Quando mais de um mês é selecionado (sem incluir "Acumulado 2025")
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)].copy()
+
+        # Ordenar por data e recalcular o Saldo
+        df_filtered = df_filtered.sort_values('Data')
+        if 'L/P' in df_filtered.columns:
+            df_filtered['Saldo'] = df_filtered['L/P'].cumsum()
     else:
-        # Filtro normal
+        # Filtro para um único mês selecionado - mantém o Saldo original
         df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
 
     # Layout principal com quatro colunas
@@ -324,8 +328,14 @@ if df is not None:
         # Calcular o lucro diário (diferença do saldo em relação ao dia anterior)
         df_daily_balance['Lucro'] = df_daily_balance['Saldo'].diff().fillna(0)
 
+        # Determinar se estamos trabalhando com múltiplos meses
+        is_multi_month = len(df_daily_balance) > 31
+
         # Criar a coluna formatada de data para rótulos do eixo X
-        df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
+        if is_multi_month:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
+        else:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d')
 
         # Criar gráfico de linha para saldo
         fig_balance = px.line(
@@ -334,7 +344,7 @@ if df is not None:
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
             markers=False,
-            line_shape="spline"  # 🔹 Transforma a linha em curva suave
+            line_shape="spline"  # Transforma a linha em curva suave
         )
 
         # Definir cores de candles para lucro diário (verde para positivo, vermelho para negativo)
@@ -350,19 +360,35 @@ if df is not None:
             showlegend=False  # Hides 'Lucro Diário' from the legend
         ))
 
-        # Ajustar eixo X com gridlines verticais para cada data
-        fig_balance.update_xaxes(
-            title="Dia",
-            tickmode="linear",
-            gridcolor='rgba(128, 128, 128, 0.15)',  # Cor das gridlines (cinza claro com mais transparência)
-            gridwidth=1,  # Espessura da linha
-            showgrid=True,  # Mostrar gridlines
-            dtick=1  # Garantir uma linha de grade para cada data
-        )
+        # Configurar eixo X de acordo com a quantidade de dados
+        if is_multi_month:
+            # Calcular o passo ideal para mostrar aproximadamente 20 pontos no eixo
+            step = max(1, len(df_daily_balance) // 20)
+
+            fig_balance.update_xaxes(
+                title="Dia/Mês",
+                tickangle=45,  # Rotacionar os rótulos para melhor leitura
+                tickmode="array",
+                tickvals=df_daily_balance['Data_Formatada'][::step],
+                ticktext=df_daily_balance['Data_Formatada'][::step],
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True
+            )
+        else:
+            # Configuração normal para um único mês
+            fig_balance.update_xaxes(
+                title="Dia",
+                tickmode="linear",
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True,
+                dtick=1
+            )
 
         # Ajustar eixo Y com o novo título
         fig_balance.update_yaxes(
-            title="Saldo total (unidades)"  # Mudando o título do eixo Y
+            title="Saldo total (unidades)"
         )
 
         # Ajustar layout para evitar sobreposição
