@@ -4,13 +4,15 @@ import plotly.express as px
 from datetime import datetime
 import calendar
 import urllib.parse
+import plotly.graph_objects as go
+
 
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (VIP)', layout='wide')
 st.title('Dashboard - Grag Apostador (VIP)')
 theme = st.get_option("theme.base")
-logo_path = "logo_vetor.png" if theme == "dark" else "logo_black.png"
+logo_path = "logo_vetor.png" if theme == "dark" else "logo_vetor.png"
 
 # Mapping of Portuguese month names to month numbers
 month_map = {
@@ -142,6 +144,7 @@ if df is not None:
     st.sidebar.header("📊 Filtros")
 
     # Get unique month/year values, excluding invalid ones
+    # Get unique month/year values, excluding invalid ones
     available_months_years = [m for m in df['Mês/Ano'].unique() if "Mês Inválido" not in m]
 
     # Sort the months chronologically (most recent to oldest)
@@ -151,32 +154,33 @@ if df is not None:
         reverse=True  # Most recent first
     )
 
+
+
+    # Adicionar a opção "Acumulado 2025" apenas se houver dados de 2025
+    selection_options = sorted_months_years.copy()
+
     # Filtro de mês/ano
     selected_months_years = st.sidebar.multiselect(
         "Selecione o período:",
-        sorted_months_years,
-        default=[last_month_year]  # Ensure last_month_year is in the sorted list
+        selection_options,
+        default=[selection_options[0]]  # Selecionar o primeiro da lista (mais recente ou acumulado)
     )
 
-    # Filtrar por mês/ano
-    df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
+    # Lógica de filtragem com tratamento especial para "Acumulado 2025"
+    # Lógica de filtragem com tratamento especial para múltiplos meses ou "Acumulado 2025"
+    if "Acumulado 2025" in selected_months_years:
+        # Se apenas "Acumulado 2025" for selecionado
 
-    # # Filtro de data
-    # if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
-    #     valid_dates = df_filtered['Data'].dropna().dt.date.unique()
-    #     if len(valid_dates) > 0:
-    #         start_date, end_date = st.sidebar.date_input(
-    #             "Selecione o período:",
-    #             value=(min(valid_dates), max(valid_dates)),
-    #             min_value=min(valid_dates),
-    #             max_value=max(valid_dates)
-    #         )
-    #
-    #         # Filtrar o dataframe com base nas datas selecionadas
-    #         df_filtered = df_filtered[
-    #             (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
-    # else:
-    #     df_filtered = df.copy()
+        # Quando mais de um mês é selecionado (sem incluir "Acumulado 2025")
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)].copy()
+
+        # Ordenar por data e recalcular o Saldo
+        df_filtered = df_filtered.sort_values('Data')
+        if 'L/P' in df_filtered.columns:
+            df_filtered['Saldo'] = df_filtered['L/P'].cumsum()
+    else:
+        # Filtro para um único mês selecionado - mantém o Saldo original
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
 
     # Layout principal com quatro colunas
     col1, col2, col3, col4 = st.columns(4)
@@ -246,6 +250,7 @@ if df is not None:
         st.subheader("📈 Evolução do Saldo Diário")
 
         # Criar uma cópia do dataframe
+        # Criar uma cópia do dataframe
         df_graph = df_filtered.dropna(subset=['Data', 'Saldo']).copy()
 
         # Criar uma coluna com o nome do mês/ano
@@ -262,23 +267,74 @@ if df is not None:
         # Agrupar por Data e pegar o saldo final do dia
         df_daily_balance = df_graph.groupby('Data', as_index=False)['Saldo'].last()
 
-        # Criar a coluna formatada de data para rótulos do eixo X
-        df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
+        # Calcular o lucro diário (diferença do saldo em relação ao dia anterior)
+        df_daily_balance['Lucro'] = df_daily_balance['Saldo'].diff().fillna(0)
 
-        # Criar o gráfico com X sendo os dias e Y o saldo final do dia
+        # Determinar se estamos trabalhando com múltiplos meses
+        is_multi_month = len(df_daily_balance) > 31
+
+        # Criar a coluna formatada de data para rótulos do eixo X
+        if is_multi_month:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
+        else:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d')
+
+        # Criar gráfico de linha para saldo
         fig_balance = px.line(
             df_daily_balance,
             x='Data_Formatada',
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
-            markers=True
+            markers=False,
+            line_shape="spline"  # Transforma a linha em curva suave
         )
 
-        # Ajustar o eixo X para mostrar todas as datas corretamente
-        fig_balance.update_xaxes(
-            title="Data",
-            tickmode="linear"
+        # Definir cores de candles para lucro diário (verde para positivo, vermelho para negativo)
+        bar_colors = ['#2ECC71' if lucro > 0 else '#EF5350' for lucro in df_daily_balance['Lucro']]
+
+        # Adicionar barras do lucro diário com as cores de candles
+        fig_balance.add_trace(go.Bar(
+            x=df_daily_balance['Data_Formatada'],
+            y=df_daily_balance['Lucro'],
+            name='Lucro Diário',
+            marker=dict(color=bar_colors),
+            opacity=0.80,  # Deixa as barras levemente transparentes para melhor visualização
+            showlegend=False  # Hides 'Lucro Diário' from the legend
+        ))
+
+        # Configurar eixo X de acordo com a quantidade de dados
+        if is_multi_month:
+            # Calcular o passo ideal para mostrar aproximadamente 20 pontos no eixo
+            step = max(1, len(df_daily_balance) // 20)
+
+            fig_balance.update_xaxes(
+                title="Dia/Mês",
+                tickangle=45,  # Rotacionar os rótulos para melhor leitura
+                tickmode="array",
+                tickvals=df_daily_balance['Data_Formatada'][::step],
+                ticktext=df_daily_balance['Data_Formatada'][::step],
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True
+            )
+        else:
+            # Configuração normal para um único mês
+            fig_balance.update_xaxes(
+                title="Dia",
+                tickmode="linear",
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True,
+                dtick=1
+            )
+
+        # Ajustar eixo Y com o novo título
+        fig_balance.update_yaxes(
+            title="Saldo total (unidades)"
         )
+
+        # Ajustar layout para evitar sobreposição
+        fig_balance.update_layout(barmode='overlay')
 
         # Mostrar o gráfico no Streamlit
         st.plotly_chart(fig_balance, use_container_width=True)
