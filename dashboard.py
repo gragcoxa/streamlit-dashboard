@@ -188,32 +188,53 @@ if df is not None:
         reverse=True  # Most recent first
     )
 
+    # Criar opção "Acumulado 2025"
+    months_2025 = [m for m in available_months_years if m.endswith('/25')]
+    has_2025_data = len(months_2025) > 0
+
+    # Adicionar a opção "Acumulado 2025" apenas se houver dados de 2025
+    selection_options = sorted_months_years.copy()
+    if has_2025_data:
+        selection_options.insert(0, "Acumulado 2025")
+
     # Filtro de mês/ano
     selected_months_years = st.sidebar.multiselect(
         "Selecione o período:",
-        sorted_months_years,
-        default=[last_month_year]  # Ensure last_month_year is in the sorted list
+        selection_options,
+        default=[selection_options[0]]  # Selecionar o primeiro da lista (mais recente ou acumulado)
     )
 
-    # Filtrar por mês/ano
-    df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
+    # Lógica de filtragem com tratamento especial para "Acumulado 2025"
+    if "Acumulado 2025" in selected_months_years:
+        # Se apenas "Acumulado 2025" for selecionado
+        if len(selected_months_years) == 1:
+            # Filtrar para pegar somente os dados de 2025
+            df_2025 = df[df['Mês/Ano'].isin(months_2025)].copy()
 
-    # # Filtro de data
-    # if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
-    #     valid_dates = df_filtered['Data'].dropna().dt.date.unique()
-    #     if len(valid_dates) > 0:
-    #         start_date, end_date = st.sidebar.date_input(
-    #             "Selecione o período:",
-    #             value=(min(valid_dates), max(valid_dates)),
-    #             min_value=min(valid_dates),
-    #             max_value=max(valid_dates)
-    #         )
-    #
-    #         # Filtrar o dataframe com base nas datas selecionadas
-    #         df_filtered = df_filtered[
-    #             (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
-    # else:
-    #     df_filtered = df.copy()
+            # Ordenar por data para garantir acúmulo cronológico correto
+            df_2025 = df_2025.sort_values('Data')
+
+            # Recalcular o Saldo como valor acumulado da coluna 'L/P'
+            if 'L/P' in df_2025.columns:
+                df_2025['Saldo'] = df_2025['L/P'].cumsum()
+
+            df_filtered = df_2025
+        else:
+            # Se "Acumulado 2025" estiver junto com outras seleções específicas
+            # Primeiro, tratamos os dados de 2025 para acumulado
+            df_2025 = df[df['Mês/Ano'].isin(months_2025)].copy()
+            if 'L/P' in df_2025.columns:
+                df_2025['Saldo'] = df_2025['L/P'].cumsum()
+
+            # Depois, pegamos os outros meses selecionados normalmente
+            other_selections = [m for m in selected_months_years if m != "Acumulado 2025"]
+            df_others = df[df['Mês/Ano'].isin(other_selections)]
+
+            # Combinamos os dataframes
+            df_filtered = pd.concat([df_2025, df_others])
+    else:
+        # Filtro normal
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
 
     # Layout principal com quatro colunas
     col1, col2, col3, col4 = st.columns(4)
@@ -283,6 +304,7 @@ if df is not None:
         st.subheader("📈 Evolução do Saldo Diário")
 
         # Criar uma cópia do dataframe
+        # Criar uma cópia do dataframe
         df_graph = df_filtered.dropna(subset=['Data', 'Saldo']).copy()
 
         # Criar uma coluna com o nome do mês/ano
@@ -311,9 +333,8 @@ if df is not None:
             x='Data_Formatada',
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
-            markers=True,
-            line_shape = "spline"  # 🔹 Transforma a linha em curva suave
-
+            markers=False,
+            line_shape="spline"  # 🔹 Transforma a linha em curva suave
         )
 
         # Definir cores de candles para lucro diário (verde para positivo, vermelho para negativo)
@@ -325,15 +346,23 @@ if df is not None:
             y=df_daily_balance['Lucro'],
             name='Lucro Diário',
             marker=dict(color=bar_colors),
-            opacity=0.80,  # 🔹 Deixa as barras levemente transparentes para melhor visualização
-            showlegend=False  # 🔹 Hides 'Lucro Diário' from the legend
-
+            opacity=0.80,  # Deixa as barras levemente transparentes para melhor visualização
+            showlegend=False  # Hides 'Lucro Diário' from the legend
         ))
 
-        # Ajustar eixo X
+        # Ajustar eixo X com gridlines verticais para cada data
         fig_balance.update_xaxes(
-            title="Data",
-            tickmode="linear"
+            title="Dia",
+            tickmode="linear",
+            gridcolor='rgba(128, 128, 128, 0.15)',  # Cor das gridlines (cinza claro com mais transparência)
+            gridwidth=1,  # Espessura da linha
+            showgrid=True,  # Mostrar gridlines
+            dtick=1  # Garantir uma linha de grade para cada data
+        )
+
+        # Ajustar eixo Y com o novo título
+        fig_balance.update_yaxes(
+            title="Saldo total (unidades)"  # Mudando o título do eixo Y
         )
 
         # Ajustar layout para evitar sobreposição
