@@ -4,13 +4,8 @@ import plotly.express as px
 from datetime import datetime
 import calendar
 import urllib.parse
-from PIL import Image
-from pathlib import Path
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
-
-
-
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador (broker)', layout='wide')
@@ -205,7 +200,6 @@ if df is not None:
     )
 
     # Lógica de filtragem com tratamento especial para "Acumulado 2025"
-    # Lógica de filtragem com tratamento especial para múltiplos meses ou "Acumulado 2025"
     if "Acumulado 2025" in selected_months_years:
         # Se apenas "Acumulado 2025" for selecionado
         if len(selected_months_years) == 1:
@@ -307,7 +301,6 @@ if df is not None:
     if 'Saldo' in df_filtered.columns and not df_filtered['Saldo'].isna().all():
         st.subheader("📈 Evolução do Saldo Diário")
 
-        # Criar uma cópia do dataframe
         # Criar uma cópia do dataframe
         df_graph = df_filtered.dropna(subset=['Data', 'Saldo']).copy()
 

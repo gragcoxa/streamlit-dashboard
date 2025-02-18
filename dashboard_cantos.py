@@ -2,13 +2,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import calendar
 import urllib.parse
-from PIL import Image
-from pathlib import Path
 import streamlit.components.v1 as components
-
-
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador BetPro IA - Escanteios', layout='wide')
@@ -185,7 +180,6 @@ if df is not None:
     st.sidebar.header("📊 Filtros")
 
     # Get unique month/year values, excluding invalid ones
-    # Get unique month/year values, excluding invalid ones
     available_months_years = [m for m in df['Mês/Ano'].unique() if "Mês Inválido" not in m]
 
     # Sort the months chronologically (most recent to oldest)
@@ -195,48 +189,57 @@ if df is not None:
         reverse=True  # Most recent first
     )
 
-    # Add "Acumulado" as the first option
-    filter_options = ["Acumulado"] + sorted_months_years
+    # Criar opção "Acumulado 2025"
+    months_2025 = [m for m in available_months_years if m.endswith('/25')]
+    has_2025_data = len(months_2025) > 0
 
-    # Get the last month/year as default if no selection is stored in session state
-    if 'selected_period' not in st.session_state:
-        st.session_state.selected_period = last_month_year
+    # Adicionar a opção "Acumulado 2025" apenas se houver dados de 2025
+    selection_options = sorted_months_years.copy()
+    if has_2025_data:
+        selection_options.insert(0, "Acumulado 2025")
 
-    # Modify the sidebar section:
-    selected_period = st.sidebar.radio(
+    # Filtro de mês/ano
+    selected_months_years = st.sidebar.multiselect(
         "Selecione o período:",
-        filter_options,
-        index=0 if st.session_state.current_period is None else filter_options.index(st.session_state.current_period)
+        selection_options,
+        default=[selection_options[0]]  # Selecionar o primeiro da lista (mais recente ou acumulado)
     )
 
-    # Update the current period if it changed
-    if selected_period != st.session_state.current_period:
-        st.session_state.current_period = selected_period
-        st.rerun()
+    # Lógica de filtragem com tratamento especial para "Acumulado 2025"
+    # Lógica de filtragem com tratamento especial para múltiplos meses ou "Acumulado 2025"
+    if "Acumulado 2025" in selected_months_years:
+        # Se apenas "Acumulado 2025" for selecionado
+        if len(selected_months_years) == 1:
+            # Filtrar para pegar somente os dados de 2025
+            df_filtered = df[df['Mês/Ano'].isin(months_2025)].copy()
 
-    # Filter the dataframe based on selection
-    if selected_period == "Acumulado":
-        df_filtered = df.copy()
-        df_filtered['Saldo'] = df_filtered['Lucro/prejuízo'].cumsum()
+            # Ordenar por data para garantir acúmulo cronológico correto
+            df_filtered = df_filtered.sort_values('Data')
+
+            # Recalcular o Saldo como valor acumulado da coluna 'L/P'
+            if 'Lucro/prejuízo' in df_filtered.columns:
+                df_filtered['Saldo'] = df_filtered['Lucro/prejuízo'].cumsum()
+        else:
+            # Se "Acumulado 2025" estiver junto com outras seleções específicas
+            other_selections = [m for m in selected_months_years if m != "Acumulado 2025"]
+            all_selections = other_selections + months_2025
+            df_filtered = df[df['Mês/Ano'].isin(all_selections)].copy()
+
+            # Ordenar por data e recalcular o Saldo
+            df_filtered = df_filtered.sort_values('Data')
+            if 'Lucro/prejuízo' in df_filtered.columns:
+                df_filtered['Saldo'] = df_filtered['Lucro/prejuízo'].cumsum()
+    elif len(selected_months_years) > 1:
+        # Quando mais de um mês é selecionado (sem incluir "Acumulado 2025")
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)].copy()
+
+        # Ordenar por data e recalcular o Saldo
+        df_filtered = df_filtered.sort_values('Data')
+        if 'Lucro/prejuízo' in df_filtered.columns:
+            df_filtered['Saldo'] = df_filtered['Lucro/prejuízo'].cumsum()
     else:
-        df_filtered = df[df['Mês/Ano'] == selected_period].copy()
-
-    # # Filtro de data
-    # if 'Data' in df_filtered.columns and pd.api.types.is_datetime64_any_dtype(df_filtered['Data']):
-    #     valid_dates = df_filtered['Data'].dropna().dt.date.unique()
-    #     if len(valid_dates) > 0:
-    #         start_date, end_date = st.sidebar.date_input(
-    #             "Selecione o período:",
-    #             value=(min(valid_dates), max(valid_dates)),
-    #             min_value=min(valid_dates),
-    #             max_value=max(valid_dates)
-    #         )
-    #
-    #         # Filtrar o dataframe com base nas datas selecionadas
-    #         df_filtered = df_filtered[
-    #             (df_filtered['Data'].dt.date >= start_date) & (df_filtered['Data'].dt.date <= end_date)]
-    # else:
-    #     df_filtered = df.copy()
+        # Filtro para um único mês selecionado - mantém o Saldo original
+        df_filtered = df[df['Mês/Ano'].isin(selected_months_years)]
 
     # Layout principal com quatro colunas
     col1, col2, col3, col4 = st.columns(4)
@@ -313,63 +316,83 @@ if df is not None:
             str).str[-2:]
 
         # Obter o nome do mês/ano único para o título
-        # Agrupar por Data e pegar o saldo final do dia
-        df_daily_balance = df_graph.groupby('Data', as_index=False)['Saldo'].last()
-
         unique_months_years = df_graph['Mês/Ano'].unique()
         if len(unique_months_years) == 1:
             month_title = unique_months_years[0]  # Usa o formato "Mês/Ano"
         else:
-            month_title = "Acumulado"
+            month_title = "Saldo Acumulado"
+
         # Agrupar por Data e pegar o saldo final do dia
         df_daily_balance = df_graph.groupby('Data', as_index=False)['Saldo'].last()
 
-        # Criar as colunas formatadas de data
-        df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')  # Para os pontos do gráfico
-        df_daily_balance['Mes_Formatado'] = df_daily_balance['Data'].dt.strftime('%m/%y')  # Para os ticks do eixo
+        # Calcular o lucro diário (diferença do saldo em relação ao dia anterior)
+        df_daily_balance['Lucro'] = df_daily_balance['Saldo'].diff().fillna(0)
 
-        # Criar o gráfico com todos os pontos
+        # Determinar se estamos trabalhando com múltiplos meses
+        is_multi_month = len(df_daily_balance) > 31
+
+        # Criar a coluna formatada de data para rótulos do eixo X
+        if is_multi_month:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d/%m')
+        else:
+            df_daily_balance['Data_Formatada'] = df_daily_balance['Data'].dt.strftime('%d')
+
+        # Criar gráfico de linha para saldo
         fig_balance = px.line(
             df_daily_balance,
             x='Data_Formatada',
             y='Saldo',
             title=f'Evolução do Saldo - {month_title}',
-            markers=True
+            markers=False,
+            line_shape="spline"  # Transforma a linha em curva suave
         )
 
-        # Ajustar o eixo X com base no período selecionado
-        if len(unique_months_years) == 1:
-            # Para um único mês, mostra todos os dias
+        # Definir cores de candles para lucro diário (verde para positivo, vermelho para negativo)
+        bar_colors = ['#2ECC71' if lucro > 0 else '#EF5350' for lucro in df_daily_balance['Lucro']]
+
+        # Adicionar barras do lucro diário com as cores de candles
+        fig_balance.add_trace(go.Bar(
+            x=df_daily_balance['Data_Formatada'],
+            y=df_daily_balance['Lucro'],
+            name='Lucro Diário',
+            marker=dict(color=bar_colors),
+            opacity=0.80,  # Deixa as barras levemente transparentes para melhor visualização
+            showlegend=False  # Hides 'Lucro Diário' from the legend
+        ))
+
+        # Configurar eixo X de acordo com a quantidade de dados
+        if is_multi_month:
+            # Calcular o passo ideal para mostrar aproximadamente 20 pontos no eixo
+            step = max(1, len(df_daily_balance) // 20)
+
             fig_balance.update_xaxes(
-                title="Data",
-                tickmode="linear"
+                title="Dia/Mês",
+                tickangle=45,  # Rotacionar os rótulos para melhor leitura
+                tickmode="array",
+                tickvals=df_daily_balance['Data_Formatada'][::step],
+                ticktext=df_daily_balance['Data_Formatada'][::step],
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True
             )
         else:
-            # Para o acumulado, mostra apenas um tick por mês
-            # Encontrar a primeira data de cada mês
-            first_days = []
-            tick_positions = []
-
-            for i, row in enumerate(df_daily_balance.itertuples()):
-                # Se é o primeiro registro do mês ou o último registro do DataFrame
-                if i == 0 or df_daily_balance['Mes_Formatado'].iloc[i] != df_daily_balance['Mes_Formatado'].iloc[i - 1]:
-                    first_days.append(row.Mes_Formatado)
-                    tick_positions.append(i)
-
+            # Configuração normal para um único mês
             fig_balance.update_xaxes(
-                title="Data",
-                tickmode="array",
-                ticktext=first_days,  # Texto dos ticks (mês/ano)
-                tickvals=tick_positions,  # Posição dos ticks
-                tickangle=0  # Rotacionar labels para melhor legibilidade
+                title="Dia",
+                tickmode="linear",
+                gridcolor='rgba(128, 128, 128, 0.15)',
+                gridwidth=1,
+                showgrid=True,
+                dtick=1
             )
 
-        # Ajustes adicionais no layout
-        fig_balance.update_layout(
-            xaxis_title="Data",
-            yaxis_title="Saldo (unidades)",
-            hovermode='x unified'
+        # Ajustar eixo Y com o novo título
+        fig_balance.update_yaxes(
+            title="Saldo total (unidades)"
         )
+
+        # Ajustar layout para evitar sobreposição
+        fig_balance.update_layout(barmode='overlay')
 
         # Mostrar o gráfico no Streamlit
         st.plotly_chart(fig_balance, use_container_width=True)
