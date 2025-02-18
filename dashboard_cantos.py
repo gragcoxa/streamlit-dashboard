@@ -4,6 +4,8 @@ import plotly.express as px
 from datetime import datetime
 import urllib.parse
 import streamlit.components.v1 as components
+import plotly.graph_objects as go
+
 
 # Configuração do Streamlit
 st.set_page_config(page_title='Dashboard - Grag Apostador BetPro IA - Escanteios', layout='wide')
