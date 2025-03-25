@@ -90,7 +90,7 @@ def load_google_sheets(sheet_url, sheet_name):
 
     try:
         df = pd.read_csv(csv_url, encoding='utf-8')
-        df = df[['Nº', 'Entrada', 'País', 'Tipo', 'Mercado', 'Linha', 'Stake', 'Data', 'Odd', 'Resultado', 'L/P', 'Saldo']]
+        df = df[['Nº', 'Entrada', 'País', 'Mercado', 'Linha', 'Stake', 'Data', 'Odd', 'Resultado', 'L/P', 'Saldo']]
         df['Stake'] = df['Stake'].astype(str).str.replace(',', '.').astype(float)
         df['L/P'] = df['L/P'].astype(str).str.replace(',', '.').astype(float)
         df['Saldo'] = df['Saldo'].astype(str).str.replace(',', '.').astype(float)
