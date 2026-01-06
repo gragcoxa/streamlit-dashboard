@@ -157,8 +157,11 @@ else:
 if df is not None:
     df = df.dropna(axis=1, how='all')
 
+    df['Mercado'] = df['Mercado'].str.strip()
+
     # Substituir as palavras na coluna 'Mercado'
     df['Mercado'] = df['Mercado'].str.replace('Under', 'Under gols', case=False)
+    df['Mercado'] = df['Mercado'].str.replace('Cantos-', 'Under Cantos', case=False)
     df['Mercado'] = df['Mercado'].str.replace('Over', 'Over gols', case=False)
 
     # Adicionar coluna de mês/ano para filtro
